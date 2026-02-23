@@ -1,0 +1,15 @@
+id = "arduino"
+name = "Arduino"
+version = "0.0.1"
+schema_version = 1
+authors = ["mambuco <mambuco@mambuco.dev>"]
+description = "Arduino language support with syntax highlighting and arduino-language-server integration."
+repository = "https://github.com/mambuco/zed-arduino"
+
+[grammars.arduino]
+repository = "https://github.com/tree-sitter-grammars/tree-sitter-arduino"
+commit = "53eb391da4c6c5857f8defa2c583c46c2594f565"
+
+[language_servers.arduino-language-server]
+name = "Arduino Language Server"
+languages = ["Arduino"]
