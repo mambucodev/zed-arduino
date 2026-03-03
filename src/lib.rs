@@ -1,5 +1,5 @@
 use std::fs;
-use zed_extension_api::{self as zed, settings::LspSettings, LanguageServerId, Result};
+use zed_extension_api::{self as zed, serde_json, settings::LspSettings, LanguageServerId, Result};
 
 struct ArduinoExtension {
     cached_lsp_path: Option<String>,
@@ -175,6 +175,14 @@ fn platform_strings(platform: zed::Os, arch: zed::Architecture) -> (&'static str
     (os_str, arch_str)
 }
 
+fn get_setting(worktree: &zed::Worktree, key: &str, default: bool) -> bool {
+    LspSettings::for_worktree("arduino-language-server", worktree)
+        .ok()
+        .and_then(|s| s.settings)
+        .and_then(|s| s.get(key).and_then(serde_json::Value::as_bool))
+        .unwrap_or(default)
+}
+
 fn clean_up_old_versions(prefix: &str, current_dir: &str) {
     if let Ok(entries) = fs::read_dir(".") {
         for entry in entries.flatten() {
@@ -218,20 +226,41 @@ impl zed::Extension for ArduinoExtension {
             }
         }
 
-        // Auto-detect or download arduino-cli
+        // Auto-detect or download arduino-cli (opt-out via autoDownloadCli: false)
         if !args.iter().any(|a| a == "-cli") {
-            let cli_path = self.arduino_cli_path(worktree)?;
+            let auto_download = get_setting(worktree, "autoDownloadCli", true);
+            let cli_path = if auto_download {
+                self.arduino_cli_path(worktree)?
+            } else {
+                worktree.which("arduino-cli").ok_or(
+                    "arduino-cli not found in PATH. Install it manually or set \
+                     \"autoDownloadCli\": true in arduino-language-server settings.",
+                )?
+            };
             args.push("-cli".into());
             args.push(cli_path);
         }
 
-        // Auto-set cli-config if not specified by user
+        // Auto-create cli-config (opt-in via autoCreateConfig: true)
         if !args.iter().any(|a| a == "-cli-config") {
+            let auto_create = get_setting(worktree, "autoCreateConfig", false);
             let config_path = "arduino-cli.yaml";
-            if !fs::metadata(config_path).map_or(false, |stat| stat.is_file()) {
+            let config_exists = fs::metadata(config_path).map_or(false, |stat| stat.is_file());
+
+            if !config_exists && !auto_create {
+                return Err(
+                    "arduino-cli config not found. Either provide one via \"-cli-config\" \
+                     in binary arguments, or set \"autoCreateConfig\": true in \
+                     arduino-language-server settings to auto-create a minimal config."
+                        .into(),
+                );
+            }
+
+            if !config_exists {
                 fs::write(config_path, "board_manager:\n    additional_urls: []\n")
                     .map_err(|e| format!("failed to create arduino-cli config: {e}"))?;
             }
+
             let work_dir = std::env::current_dir()
                 .map_err(|e| format!("failed to get work directory: {e}"))?;
             let absolute_config = work_dir.join(config_path).to_string_lossy().to_string();

@@ -1,6 +1,6 @@
 id = "arduino"
 name = "Arduino"
-version = "0.0.1"
+version = "0.1.0"
 schema_version = 1
 authors = ["mambuco <mambuco@mambuco.dev>"]
 description = "Arduino language support with syntax highlighting and arduino-language-server integration."
